@@ -1,0 +1,61 @@
+services:
+  janusgraph:
+    image: docker.io/janusgraph/janusgraph:latest
+    container_name: janusgraph
+    networks:
+      - janus_bridge
+    ports:
+      - "8182:8182"
+    healthcheck:
+      test: ["CMD", "./bin/gremlin.sh", "-e", "scripts/remote-connect.groovy"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 5s
+    volumes:
+      - "janusgraph-data:/var/lib/janusgraph"
+
+  gremlin-console:
+    image: docker.io/janusgraph/janusgraph:latest
+    container_name: gremlin-console
+    networks:
+      - janus_bridge
+    depends_on:
+      janusgraph:
+        condition: service_healthy
+    env_file:
+      - .env
+    entrypoint: >
+      bash -c "
+        ./bin/gremlin.sh -e /scripts/load_gods_script.groovy
+      "
+    volumes:
+      - ./scripts:/scripts
+
+  janusgraph-visualizer:
+    build:
+      context: .
+      dockerfile: full.Dockerfile
+    image: docker.io/janusgraph/janusgraph-visualizer
+    container_name: janusgraph-visualizer
+    depends_on:
+      gremlin-console:
+        condition: service_completed_successfully
+      janusgraph:
+        condition: service_healthy
+    ports:
+      - "3001:3001"
+      - "3000:3000"
+    networks:
+      - janus_bridge
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+
+networks:
+  janus_bridge:
+    driver: bridge
+volumes:
+  janusgraph-data:
+
